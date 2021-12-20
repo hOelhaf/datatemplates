@@ -97,6 +97,7 @@ class DataTemplateBase(rst.Directive):
             'options': self.options,
             'env': env,
             'load': self._dynamic_load,
+            'args': self.arguments,
         }
 
     def _dynamic_load(self, source, data_format=None, **input_loader_options):
