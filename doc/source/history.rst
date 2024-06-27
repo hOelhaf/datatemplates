@@ -2,7 +2,16 @@
  Release History
 =================
 
-0.8.1
+0.10.0
+======
+
+* Add python 3.12 to the test matrix and support list.
+* Add support for `custom template bridges
+  <https://www.sphinx-doc.org/en/master/usage/configuration.html#confval-template_bridge>`_. See
+  `PR 92 <https://github.com/sphinx-contrib/datatemplates/pull/92>`__
+  for details. (contribution by Ilya Boyazitov).
+
+0.9.1
 =====
 
 * Fix dependency management in the directive so that directives with
@@ -10,6 +19,14 @@
   that resolves to a directory. See `PR 83
   <https://github.com/sphinx-contrib/datatemplates/pull/83>`__ for
   details. (contributions by Øyvind Harboe)
+
+0.9.0
+=====
+
+* Fix directive cross-reference management so it works in markdown
+  files. See `PR 82
+  <https://github.com/sphinx-contrib/datatemplates/pull/82>`__ for
+  details. (contributions by Manuel Racle)
 
 0.8.0
 =====

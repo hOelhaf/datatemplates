@@ -5,12 +5,13 @@ import mimetypes
 from collections import defaultdict
 
 import defusedxml.ElementTree as ET
+import jinja2
 import yaml
 from docutils import nodes
 from docutils.parsers import rst
 from docutils.statemachine import ViewList
 from sphinx.jinja2glue import BuiltinTemplateLoader
-from sphinx.util import logging
+from sphinx.util import logging, import_object
 from sphinx.util.nodes import nested_parse_with_titles
 from sphinxcontrib.datatemplates import helpers, loaders
 
@@ -28,7 +29,13 @@ def _templates(builder):
     if not templates:
         if not _default_templates:
             # Initialize default templates manager once
-            _default_templates = BuiltinTemplateLoader()
+            if builder.config.template_bridge:
+                _default_templates = import_object(
+                    objname=builder.config.template_bridge,
+                    source="template_bridge setting",
+                )()
+            else:
+                _default_templates = BuiltinTemplateLoader()
             _default_templates.init(builder)
 
         templates = _default_templates
@@ -147,8 +154,14 @@ class DataTemplateBase(rst.Directive):
             source = self.options['source']
         elif self.arguments:
             source = self.arguments[0]
-        else:
+        elif self.loader in {loaders.load_import_module, loaders.load_nodata}:
             source = ""
+        else:
+            error = self.state_machine.reporter.error(
+                'Source file is required',
+                nodes.literal_block(self.block_text, self.block_text),
+                line=self.lineno)
+            return [error]
 
         relative_resolved_path, absolute_resolved_path = env.relfn2path(source)
 
@@ -166,6 +179,13 @@ class DataTemplateBase(rst.Directive):
             template = '\n'.join(self.content)
             render_function = _templates(builder).render_string
 
+        if not template:
+            error = self.state_machine.reporter.error(
+                "Template is empty",
+                nodes.literal_block(self.block_text, self.block_text),
+                line=self.lineno)
+            return [error]
+
         loader_options = {
             "source": source,
             "relative_resolved_path": relative_resolved_path,
@@ -176,12 +196,38 @@ class DataTemplateBase(rst.Directive):
                 "-", "_")  # make identifier-compatible if trivially possible
             loader_options.setdefault(k, v)  # do not overwrite
 
-        with self.loader(**loader_options) as data:
-            context = self._make_context(data, app.config, env)
-            rendered_template = render_function(
-                template,
-                context,
-            )
+        try:
+            with self.loader(**loader_options) as data:
+                context = self._make_context(data, app.config, env)
+                rendered_template = render_function(
+                    template,
+                    context,
+                )
+        except FileNotFoundError:
+            error = self.state_machine.reporter.error(
+                f"Source file '{relative_resolved_path}' not found",
+                nodes.literal_block(self.block_text, self.block_text),
+                line=self.lineno)
+            return [error]
+        except loaders.LoaderError as err:
+            error = self.state_machine.reporter.error(
+                f"Error in source '{relative_resolved_path}': {err}",
+                nodes.literal_block(self.block_text, self.block_text),
+                line=self.lineno)
+            return [error]
+        except jinja2.exceptions.TemplateNotFound:
+            error = self.state_machine.reporter.error(
+                f"Template file '{template}' not found",
+                nodes.literal_block(self.block_text, self.block_text),
+                line=self.lineno)
+            return [error]
+        except jinja2.exceptions.TemplateSyntaxError as err:
+            error = self.state_machine.reporter.error(
+                f"Error in template file '{template}' line {err.lineno}: "
+                f"{err.message}",
+                nodes.literal_block(self.block_text, self.block_text),
+                line=self.lineno)
+            return [error]
 
         result = ViewList()
         for line in rendered_template.splitlines():
